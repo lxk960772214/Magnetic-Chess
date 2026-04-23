@@ -1,0 +1,735 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>磁力棋</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif;background:#0a0b1a;color:#d0d0d0;min-height:100vh;display:flex;justify-content:center;align-items:center;overflow:hidden;user-select:none}
+.game-wrap{display:flex;flex-direction:column;align-items:center;gap:16px;padding:16px}
+header{text-align:center}
+h1{font-size:26px;font-weight:700;letter-spacing:6px;color:#fff;margin-bottom:6px}
+.turn-bar{font-size:14px;padding:6px 24px;border-radius:20px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);display:inline-flex;align-items:center;gap:8px;transition:all .3s}
+.turn-dot{width:10px;height:10px;border-radius:50%;transition:background .3s}
+.main{display:flex;align-items:flex-start;gap:24px}
+.panel{width:150px;padding:16px;border-radius:14px;background:rgba(255,255,255,.025);border:1px solid rgba(255,255,255,.05);transition:all .3s}
+.panel.active{border-color:rgba(255,255,255,.18);background:rgba(255,255,255,.055)}
+.panel-name{font-size:13px;font-weight:500;margin-bottom:10px;display:flex;align-items:center;gap:6px}
+.panel-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.hand-list{display:flex;flex-direction:column;gap:6px}
+.hand-row{display:flex;align-items:center;gap:6px;font-size:12px;color:#999}
+.hand-row svg{flex-shrink:0}
+.hand-count{margin-left:auto;color:#bbb;font-weight:500}
+.hand-total{margin-top:8px;padding-top:8px;border-top:1px solid rgba(255,255,255,.06);font-size:12px;color:#777;text-align:right}
+.board-box{position:relative}
+canvas{display:block;cursor:crosshair;border-radius:12px;max-width:100%;height:auto}
+.restart-btn{font-size:11px;color:#555;cursor:pointer;padding:4px 10px;border-radius:8px;border:1px solid rgba(255,255,255,.06);background:transparent;transition:all .2s}
+.restart-btn:hover{color:#999;border-color:rgba(255,255,255,.15)}
+@media(max-width:900px){.main{flex-direction:column;align-items:center}.panel{width:100%;max-width:340px}.panel .hand-list{flex-direction:row;gap:16px}.panel .hand-total{display:none}}
+.selector{display:flex;align-items:center;gap:12px}
+.sel-label{font-size:12px;color:#666;margin-right:4px}
+.sel-btn{width:64px;height:58px;border-radius:12px;border:2px solid rgba(255,255,255,.08);background:rgba(255,255,255,.025);cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;transition:all .2s;color:#888}
+.sel-btn:hover:not(.disabled){border-color:rgba(255,255,255,.25);background:rgba(255,255,255,.06)}
+.sel-btn.selected{border-color:#fff;background:rgba(255,255,255,.1);color:#fff}
+.sel-btn.disabled{opacity:.25;cursor:not-allowed}
+.sel-btn .cnt{font-size:10px;opacity:.6}
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,.65);display:flex;align-items:center;justify-content:center;z-index:99;opacity:0;pointer-events:none;transition:opacity .3s}
+.overlay.show{opacity:1;pointer-events:all}
+.modal{background:#14142a;border:1px solid rgba(255,255,255,.1);border-radius:20px;padding:36px 44px;text-align:center;max-width:360px}
+.modal h2{font-size:22px;margin-bottom:8px;color:#fff}
+.modal p{color:#888;font-size:14px;margin-bottom:20px}
+.btn{padding:10px 28px;border-radius:10px;border:1px solid rgba(255,255,255,.15);background:rgba(255,255,255,.06);color:#fff;font-size:14px;cursor:pointer;transition:all .2s}
+.btn:hover{background:rgba(255,255,255,.12)}
+.rules-btn{position:absolute;top:8px;right:8px;width:28px;height:28px;border-radius:50%;border:1px solid rgba(255,255,255,.1);background:rgba(255,255,255,.04);color:#666;font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .2s;z-index:2}
+.rules-btn:hover{border-color:rgba(255,255,255,.25);color:#aaa}
+.range-toggle{font-size:11px;color:#555;cursor:pointer;padding:4px 10px;border-radius:8px;border:1px solid rgba(255,255,255,.06);background:transparent;transition:all .2s;margin-left:auto}
+.range-toggle:hover{color:#999;border-color:rgba(255,255,255,.15)}
+.range-toggle.on{color:#aaa;border-color:rgba(255,255,255,.2);background:rgba(255,255,255,.05)}
+@keyframes pulseGlow{0%,100%{box-shadow:0 0 0 0 transparent}50%{box-shadow:0 0 12px 2px rgba(255,255,255,.15)}}
+</style>
+</head>
+<body>
+<div class="game-wrap">
+  <header>
+    <h1>磁 力 棋</h1>
+    <div class="turn-bar"><span class="turn-dot" id="turnDot"></span><span id="turnText">玩家 1 的回合</span></div>
+  </header>
+  <div class="main">
+    <div class="panel" id="panel0">
+      <div class="panel-name"><span class="panel-dot" style="background:#4ecdc4"></span>玩家 1</div>
+      <div class="hand-list" id="hand0"></div>
+      <div class="hand-total" id="total0">剩余 10 子</div>
+    </div>
+    <div class="board-box">
+      <button class="rules-btn" id="rulesBtn" title="规则">?</button>
+      <canvas id="cv" width="600" height="600"></canvas>
+    </div>
+    <div class="panel" id="panel1">
+      <div class="panel-name"><span class="panel-dot" style="background:#ff6b6b"></span>玩家 2</div>
+      <div class="hand-list" id="hand1"></div>
+      <div class="hand-total" id="total1">剩余 10 子</div>
+    </div>
+  </div>
+  <div class="selector">
+    <span class="sel-label">选子</span>
+    <button class="sel-btn" data-type="triangle"><svg width="22" height="22"><polygon points="11,3 20,19 2,19" fill="none" stroke="currentColor" stroke-width="1.8"/></svg><span class="cnt" id="cntTriangle">3</span></button>
+    <button class="sel-btn" data-type="circle"><svg width="22" height="22"><circle cx="11" cy="11" r="8" fill="none" stroke="currentColor" stroke-width="1.8"/></svg><span class="cnt" id="cntCircle">4</span></button>
+    <button class="sel-btn" data-type="square"><svg width="22" height="22"><rect x="4" y="4" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" rx="1"/></svg><span class="cnt" id="cntSquare">3</span></button>
+    <button class="range-toggle" id="rangeToggle">显示范围</button>
+    <button class="restart-btn" id="restartBtn2">重新开始</button>
+  </div>
+</div>
+
+<div class="overlay" id="gameOverOverlay">
+  <div class="modal"><h2 id="winnerText">玩家 1 获胜!</h2><p id="winnerSub">所有棋子已放完</p><button class="btn" id="restartBtn1">再来一局</button></div>
+</div>
+
+<div class="overlay" id="rulesOverlay">
+  <div class="modal" style="text-align:left;max-width:420px">
+    <h2 style="text-align:center;margin-bottom:14px">游戏规则</h2>
+    <p style="line-height:1.8;font-size:13px;color:#aaa">
+      1. 两位玩家轮流在圆形棋盘上放置磁铁棋子<br>
+      2. 先选择棋子类型，再点击棋盘放置<br>
+      3. 若放置后引发棋子互相吸引移动，所有位移棋子回到当前玩家手中<br>
+      4. 吸引可引发连锁反应（雪崩效应）<br>
+      5. 若未引发位移，则换对方下棋<br>
+      6. 先放完手中所有棋子者获胜<br><br>
+      <b style="color:#ccc">棋子属性</b><br>
+      ▲ 三角形：质量小 · 磁力弱 · 范围小（易被拉走，但灵活好放）<br>
+      ● 圆形：质量中 · 磁力中 · 范围中（平衡型）<br>
+      ■ 正方形：质量大 · 磁力强 · 范围大（不易被拉走，但易引发连锁）
+    </p>
+    <div style="text-align:center;margin-top:16px"><button class="btn" id="closeRules">知道了</button></div>
+  </div>
+</div>
+
+<audio id="sndPlace" src="落子.mp3" preload="auto"></audio>
+<audio id="sndCollide" src="碰撞.mp3" preload="auto"></audio>
+
+<script>
+(function(){
+'use strict';
+
+const sndPlace = document.getElementById('sndPlace');
+const sndCollide = document.getElementById('sndCollide');
+
+function playSound(el){
+  el.currentTime = 0;
+  el.play().catch(()=>{});
+}
+
+const CFG = {
+  BOARD_R: 240,
+  CX: 300, CY: 300,
+  PIECE: {
+    triangle: { radius:12, attract:60,  mass:0.5, label:'三角形', init:3 },
+    circle:   { radius:14, attract:85,  mass:1.0, label:'圆形',   init:4 },
+    square:   { radius:18, attract:120, mass:2.0, label:'正方形', init:3 }
+  },
+  COLORS: ['#4ecdc4','#ff6b6b'],
+  COLORS_DARK: ['#2a9d8f','#c44569'],
+  COLORS_GLOW: ['rgba(78,205,196,','rgba(255,107,107,'],
+  SNAP_EPS: 1,
+  ANIM_SLIDE: 260,
+  ANIM_GAP: 80,
+  ANIM_RETURN: 400,
+  ANIM_PLACE: 180
+};
+
+let G, canvas, ctx;
+
+function init(){
+  canvas = document.getElementById('cv');
+  ctx = canvas.getContext('2d');
+  resetGame();
+  bindEvents();
+  requestAnimationFrame(loop);
+}
+
+function resetGame(){
+  G = {
+    pieces: [],
+    players: [
+      { hand:{ circle:4, square:3, triangle:3 } },
+      { hand:{ circle:4, square:3, triangle:3 } }
+    ],
+    current: 0,
+    selectedType: null,
+    state: 'idle',
+    mouse: null,
+    showRanges: false,
+    anim: null,
+    returning: [],
+    particles: [],
+    flashes: [],
+    placeScale: null,
+    hoverAttracted: []
+  };
+  updateUI();
+}
+
+function bindEvents(){
+  canvas.addEventListener('mousemove', onMove);
+  canvas.addEventListener('mouseleave', ()=>{ G.mouse=null; G.hoverAttracted=[]; });
+  canvas.addEventListener('click', onClick);
+  canvas.addEventListener('contextmenu', e=>{ e.preventDefault(); G.selectedType=null; updateUI(); });
+  document.querySelectorAll('.sel-btn').forEach(btn=>{
+    btn.addEventListener('click', ()=>selectType(btn.dataset.type));
+  });
+  document.getElementById('rulesBtn').addEventListener('click', ()=>{
+    document.getElementById('rulesOverlay').classList.add('show');
+  });
+  document.getElementById('closeRules').addEventListener('click', ()=>{
+    document.getElementById('rulesOverlay').classList.remove('show');
+  });
+  document.getElementById('restartBtn1').addEventListener('click', ()=>{
+    document.getElementById('gameOverOverlay').classList.remove('show');
+    resetGame();
+  });
+  document.getElementById('restartBtn2').addEventListener('click', ()=>{
+    if(G.state!=='gameOver') resetGame();
+  });
+  document.getElementById('rangeToggle').addEventListener('click', function(){
+    G.showRanges = !G.showRanges;
+    this.classList.toggle('on', G.showRanges);
+  });
+  document.addEventListener('keydown', e=>{
+    if(e.key==='Escape'){ G.selectedType=null; updateUI(); }
+  });
+}
+
+function selectType(type){
+  if(G.state==='animating') return;
+  const h = G.players[G.current].hand;
+  if(h[type]<=0) return;
+  G.selectedType = (G.selectedType===type) ? null : type;
+  updateUI();
+}
+
+function onMove(e){
+  const r = canvas.getBoundingClientRect();
+  const sx = canvas.width/r.width, sy = canvas.height/r.height;
+  G.mouse = { x:(e.clientX-r.left)*sx, y:(e.clientY-r.top)*sy };
+  updateHoverAttracted();
+}
+
+function updateHoverAttracted(){
+  G.hoverAttracted = [];
+  if(G.state!=='placing'||!G.mouse||!G.selectedType) return;
+  const pt=CFG.PIECE[G.selectedType];
+  const mx=G.mouse.x, my=G.mouse.y;
+  for(const p of G.pieces){
+    const d=getDist(mx,my,p.x,p.y);
+    const thresh=(pt.attract+p.attract)/2;
+    const snap=pt.radius+p.radius;
+    if(d>=snap+CFG.SNAP_EPS && d<thresh){
+      G.hoverAttracted.push(p);
+    }
+  }
+}
+
+function onClick(e){
+  if(G.state==='animating'||!G.selectedType||!G.mouse) return;
+  const mx=G.mouse.x, my=G.mouse.y;
+  const pt=CFG.PIECE[G.selectedType];
+  if(!inBoard(mx,my,pt.radius)||overlaps(mx,my,pt.radius)) return;
+  placePiece(mx,my,G.selectedType);
+}
+
+function getDist(x1,y1,x2,y2){
+  const dx=x2-x1, dy=y2-y1;
+  return Math.sqrt(dx*dx+dy*dy);
+}
+
+function inBoard(x,y,r){
+  return getDist(x,y,CFG.CX,CFG.CY)+r <= CFG.BOARD_R;
+}
+
+function overlaps(x,y,r){
+  for(const p of G.pieces){
+    if(getDist(x,y,p.x,p.y) < r+p.radius+3) return true;
+  }
+  return false;
+}
+
+function placePiece(x,y,type){
+  const pt=CFG.PIECE[type];
+  const piece = {
+    x, y, type,
+    radius: pt.radius,
+    attract: pt.attract,
+    mass: pt.mass,
+    player: G.current,
+    id: Date.now()+Math.random(),
+    placedAt: performance.now()
+  };
+  G.players[G.current].hand[type]--;
+  G.pieces.push(piece);
+  playSound(sndPlace);
+  G.state='animating';
+  G.selectedType=null;
+  G.placeScale = { piece, start: performance.now() };
+  updateUI();
+
+  setTimeout(()=>processAttractions(piece), CFG.ANIM_PLACE+50);
+}
+
+function processAttractions(newPiece){
+  const result = computeSequence();
+  if(result.steps.length===0){
+    finishTurn();
+    return;
+  }
+  playSequence(result.steps, result.moved);
+}
+
+function computeSequence(){
+  const steps=[];
+  const moved=new Set();
+
+  const saved=new Map();
+  for(const p of G.pieces) saved.set(p,{x:p.x,y:p.y});
+
+  let changed=true;
+  while(changed){
+    changed=false;
+    const ps=G.pieces;
+    let cands=[];
+    for(let i=0;i<ps.length;i++){
+      for(let j=i+1;j<ps.length;j++){
+        const a=ps[i],b=ps[j];
+        const d=getDist(a.x,a.y,b.x,b.y);
+        const thresh=(a.attract+b.attract)/2;
+        const snap=a.radius+b.radius;
+        if(d<=snap+CFG.SNAP_EPS) continue;
+        if(d<thresh) cands.push({a,b,d});
+      }
+    }
+    cands.sort((x,y)=>x.d-y.d);
+
+    for(const {a,b,d} of cands){
+      const snapDist=a.radius+b.radius;
+      const moveD=d-snapDist;
+      const dirX=(b.x-a.x)/d, dirY=(b.y-a.y)/d;
+      const rA=b.mass/(a.mass+b.mass);
+      const rB=a.mass/(a.mass+b.mass);
+      const nAx=a.x+dirX*moveD*rA;
+      const nAy=a.y+dirY*moveD*rA;
+      const nBx=b.x-dirX*moveD*rB;
+      const nBy=b.y-dirY*moveD*rB;
+
+      if(inBoard(nAx,nAy,a.radius)&&inBoard(nBx,nBy,b.radius)){
+        steps.push({
+          a, b,
+          oAx:a.x, oAy:a.y, nAx, nAy,
+          oBx:b.x, oBy:b.y, nBx, nBy
+        });
+        a.x=nAx; a.y=nAy;
+        b.x=nBx; b.y=nBy;
+        moved.add(a); moved.add(b);
+        changed=true;
+        break;
+      }
+    }
+  }
+
+  for(const [p,pos] of saved){ p.x=pos.x; p.y=pos.y; }
+  return {steps, moved};
+}
+
+function playSequence(steps, moved){
+  let i=0;
+  function next(){
+    if(i>=steps.length){
+      setTimeout(()=>doReturn(moved), CFG.ANIM_GAP);
+      return;
+    }
+    const s=steps[i];
+    G.anim = {
+      type:'slide',
+      pieceA:s.a, pieceB:s.b,
+      fromAx:s.oAx, fromAy:s.oAy, toAx:s.nAx, toAy:s.nAy,
+      fromBx:s.oBx, fromBy:s.oBy, toBx:s.nBx, toBy:s.nBy,
+      duration:CFG.ANIM_SLIDE,
+      startTime:performance.now()
+    };
+    const onComplete=()=>{
+      s.a.x=s.nAx; s.a.y=s.nAy;
+      s.b.x=s.nBx; s.b.y=s.nBy;
+      playSound(sndCollide);
+      addFlash((s.nAx+s.nBx)/2,(s.nAy+s.nBy)/2);
+      spawnParticles((s.nAx+s.nBx)/2,(s.nAy+s.nBy)/2,CFG.COLORS[s.a.player]);
+      G.anim=null;
+      i++;
+      setTimeout(next, CFG.ANIM_GAP);
+    };
+    G.anim.onComplete=onComplete;
+  }
+  next();
+}
+
+function doReturn(moved){
+  const arr=[...moved];
+  G.returning=arr;
+  G.anim={
+    type:'return',
+    pieces:arr,
+    startTime:performance.now(),
+    duration:CFG.ANIM_RETURN,
+    onComplete:()=>{
+      for(const p of arr){
+        const idx=G.pieces.indexOf(p);
+        if(idx>=0) G.pieces.splice(idx,1);
+        G.players[G.current].hand[p.type]++;
+      }
+      G.returning=[];
+      G.anim=null;
+      finishTurn();
+    }
+  };
+}
+
+function finishTurn(){
+  const total=handTotal(G.current);
+  if(total===0){
+    G.state='gameOver';
+    updateUI();
+    showGameOver(G.current);
+    return;
+  }
+  G.current=1-G.current;
+  G.state='idle';
+  updateUI();
+}
+
+function handTotal(pi){
+  const h=G.players[pi].hand;
+  return h.circle+h.square+h.triangle;
+}
+
+function showGameOver(pi){
+  document.getElementById('winnerText').textContent='玩家 '+(pi+1)+' 获胜!';
+  setTimeout(()=>document.getElementById('gameOverOverlay').classList.add('show'),400);
+}
+
+function addFlash(x,y){
+  G.flashes.push({x,y,start:performance.now(),dur:350});
+}
+
+function spawnParticles(x,y,color){
+  for(let i=0;i<8;i++){
+    const ang=Math.random()*Math.PI*2;
+    const spd=50+Math.random()*80;
+    G.particles.push({
+      x,y,vx:Math.cos(ang)*spd,vy:Math.sin(ang)*spd,
+      life:1, color, size:2+Math.random()*3
+    });
+  }
+}
+
+function easeOut(t){ return 1-Math.pow(1-t,3); }
+
+let lastTime=0;
+function loop(now){
+  const dt=Math.min((now-lastTime)/1000,0.05);
+  lastTime=now;
+  updateAnim(now);
+  updateParticles(dt);
+  G.flashes=G.flashes.filter(f=>now-f.start<f.dur);
+  if(G.placeScale && now-G.placeScale.start>CFG.ANIM_PLACE) G.placeScale=null;
+  render(now);
+  requestAnimationFrame(loop);
+}
+
+function updateAnim(now){
+  if(!G.anim) return;
+  const a=G.anim;
+  const t=Math.min((now-a.startTime)/a.duration,1);
+  const e=easeOut(t);
+
+  if(a.type==='slide'){
+    a.pieceA.x=a.fromAx+(a.toAx-a.fromAx)*e;
+    a.pieceA.y=a.fromAy+(a.toAy-a.fromAy)*e;
+    a.pieceB.x=a.fromBx+(a.toBx-a.fromBx)*e;
+    a.pieceB.y=a.fromBy+(a.toBy-a.fromBy)*e;
+  }
+
+  if(t>=1){
+    if(a.onComplete) a.onComplete();
+  }
+}
+
+function updateParticles(dt){
+  for(const p of G.particles){
+    p.x+=p.vx*dt; p.y+=p.vy*dt;
+    p.life-=dt*2.2;
+    p.vx*=0.95; p.vy*=0.95;
+  }
+  G.particles=G.particles.filter(p=>p.life>0);
+}
+
+function render(now){
+  ctx.clearRect(0,0,600,600);
+  drawBoard();
+  if(G.showRanges) drawRanges();
+  drawPieces(now);
+  drawReturning(now);
+  drawPreview(now);
+  drawFlashes(now);
+  drawParticles();
+}
+
+function drawBoard(){
+  const g=ctx.createRadialGradient(CFG.CX,CFG.CY,0,CFG.CX,CFG.CY,CFG.BOARD_R);
+  g.addColorStop(0,'#151532');
+  g.addColorStop(1,'#0d0d22');
+  ctx.beginPath();
+  ctx.arc(CFG.CX,CFG.CY,CFG.BOARD_R,0,Math.PI*2);
+  ctx.fillStyle=g;
+  ctx.fill();
+  ctx.strokeStyle='rgba(100,100,200,0.15)';
+  ctx.lineWidth=1.5;
+  ctx.stroke();
+  for(let r=60;r<CFG.BOARD_R;r+=60){
+    ctx.beginPath();
+    ctx.arc(CFG.CX,CFG.CY,r,0,Math.PI*2);
+    ctx.strokeStyle='rgba(255,255,255,0.018)';
+    ctx.lineWidth=1;
+    ctx.stroke();
+  }
+  ctx.beginPath();
+  ctx.arc(CFG.CX,CFG.CY,3,0,Math.PI*2);
+  ctx.fillStyle='rgba(255,255,255,0.06)';
+  ctx.fill();
+}
+
+function drawRanges(){
+  for(const p of G.pieces){
+    ctx.beginPath();
+    ctx.arc(p.x,p.y,p.attract,0,Math.PI*2);
+    ctx.strokeStyle='rgba(255,255,255,0.05)';
+    ctx.lineWidth=1;
+    ctx.setLineDash([4,4]);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+}
+
+function drawPieces(now){
+  for(const p of G.pieces){
+    if(G.returning.includes(p)) continue;
+    let scale=1;
+    if(G.placeScale && G.placeScale.piece===p){
+      const t=Math.min((now-G.placeScale.start)/CFG.ANIM_PLACE,1);
+      scale=easeOut(t);
+    }
+    const highlight=G.hoverAttracted.includes(p);
+    drawOnePiece(p,1,scale,highlight,now);
+  }
+}
+
+function drawOnePiece(p,alpha,scale,highlight,now){
+  const c=CFG.COLORS[p.player];
+  const cd=CFG.COLORS_DARK[p.player];
+  const cg=CFG.COLORS_GLOW[p.player];
+  ctx.save();
+  ctx.globalAlpha=alpha;
+  ctx.translate(p.x,p.y);
+  ctx.scale(scale,scale);
+  ctx.translate(-p.x,-p.y);
+
+  if(highlight){
+    ctx.shadowColor=c;
+    ctx.shadowBlur=16;
+  } else {
+    ctx.shadowColor=c;
+    ctx.shadowBlur=6;
+  }
+
+  const g=ctx.createRadialGradient(p.x-3,p.y-3,0,p.x,p.y,p.radius+2);
+  g.addColorStop(0,c);
+  g.addColorStop(1,cd);
+  ctx.fillStyle=g;
+
+  drawShape(p);
+  ctx.fill();
+  ctx.shadowBlur=0;
+  ctx.strokeStyle=highlight?'rgba(255,255,255,0.5)':'rgba(255,255,255,0.2)';
+  ctx.lineWidth=highlight?1.5:1;
+  drawShape(p);
+  ctx.stroke();
+
+  if(highlight){
+    ctx.beginPath();
+    ctx.arc(p.x,p.y,p.radius+6,0,Math.PI*2);
+    ctx.strokeStyle=cg+'0.35)';
+    ctx.lineWidth=2;
+    ctx.stroke();
+  }
+
+  ctx.restore();
+}
+
+function drawShape(p){
+  if(p.type==='circle'){
+    ctx.beginPath();
+    ctx.arc(p.x,p.y,p.radius,0,Math.PI*2);
+  }else if(p.type==='square'){
+    const s=p.radius*0.88;
+    roundRect(p.x-s,p.y-s,s*2,s*2,3);
+  }else{
+    ctx.beginPath();
+    const r=p.radius+2;
+    for(let i=0;i<3;i++){
+      const a=i*Math.PI*2/3-Math.PI/2;
+      const px=p.x+Math.cos(a)*r;
+      const py=p.y+Math.sin(a)*r;
+      i===0?ctx.moveTo(px,py):ctx.lineTo(px,py);
+    }
+    ctx.closePath();
+  }
+}
+
+function roundRect(x,y,w,h,r){
+  ctx.beginPath();
+  ctx.moveTo(x+r,y);
+  ctx.lineTo(x+w-r,y);
+  ctx.quadraticCurveTo(x+w,y,x+w,y+r);
+  ctx.lineTo(x+w,y+h-r);
+  ctx.quadraticCurveTo(x+w,y+h,x+w-r,y+h);
+  ctx.lineTo(x+r,y+h);
+  ctx.quadraticCurveTo(x,y+h,x,y+h-r);
+  ctx.lineTo(x,y+r);
+  ctx.quadraticCurveTo(x,y,x+r,y);
+  ctx.closePath();
+}
+
+function drawPreview(now){
+  if(G.state!=='placing'||!G.mouse||!G.selectedType) return;
+  const pt=CFG.PIECE[G.selectedType];
+  const mx=G.mouse.x, my=G.mouse.y;
+  const valid=inBoard(mx,my,pt.radius)&&!overlaps(mx,my,pt.radius);
+  const fake={x:mx,y:my,type:G.selectedType,radius:pt.radius,attract:pt.attract,mass:pt.mass,player:G.current};
+  ctx.save();
+  ctx.globalAlpha=valid?0.45:0.2;
+  drawOnePiece(fake,1,1,false,now);
+  ctx.restore();
+  if(valid){
+    ctx.beginPath();
+    ctx.arc(mx,my,pt.attract,0,Math.PI*2);
+    ctx.strokeStyle='rgba(255,255,255,0.07)';
+    ctx.lineWidth=1;
+    ctx.setLineDash([3,4]);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    for(const p of G.hoverAttracted){
+      ctx.beginPath();
+      ctx.moveTo(mx,my);
+      ctx.lineTo(p.x,p.y);
+      ctx.strokeStyle='rgba(255,120,120,0.3)';
+      ctx.lineWidth=1.5;
+      ctx.setLineDash([4,4]);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+  }
+}
+
+function drawReturning(now){
+  if(G.returning.length===0) return;
+  const a=G.anim;
+  if(!a||a.type!=='return') return;
+  const t=Math.min((now-a.startTime)/a.duration,1);
+  const ease=easeOut(t);
+  const alpha=1-ease;
+  const scale=1-ease*0.6;
+  for(const p of a.pieces){
+    ctx.save();
+    ctx.globalAlpha=alpha;
+    if(t<0.3){
+      const glow=0.4*(1-t/0.3);
+      ctx.shadowColor=CFG.COLORS[p.player];
+      ctx.shadowBlur=18*glow;
+    }
+    ctx.translate(p.x,p.y);
+    ctx.scale(scale,scale);
+    ctx.translate(-p.x,-p.y);
+    drawOnePiece(p,1,1,false,now);
+    ctx.restore();
+  }
+}
+
+function drawFlashes(now){
+  for(const f of G.flashes){
+    const t=(now-f.start)/f.dur;
+    const r=6+t*30;
+    const a=(1-t)*0.6;
+    ctx.save();
+    ctx.globalAlpha=a;
+    ctx.beginPath();
+    ctx.arc(f.x,f.y,r,0,Math.PI*2);
+    ctx.fillStyle='#fff';
+    ctx.fill();
+    ctx.restore();
+  }
+}
+
+function drawParticles(){
+  for(const p of G.particles){
+    ctx.save();
+    ctx.globalAlpha=Math.max(0,p.life)*0.8;
+    ctx.beginPath();
+    ctx.arc(p.x,p.y,Math.max(0.5,p.size*p.life),0,Math.PI*2);
+    ctx.fillStyle=p.color;
+    ctx.fill();
+    ctx.restore();
+  }
+}
+
+function updateUI(){
+  const pi=G.current;
+  const col=CFG.COLORS[pi];
+  document.getElementById('turnDot').style.background=col;
+  document.getElementById('turnText').textContent='玩家 '+(pi+1)+' 的回合';
+  document.getElementById('panel0').classList.toggle('active',pi===0);
+  document.getElementById('panel1').classList.toggle('active',pi===1);
+
+  for(let i=0;i<2;i++){
+    const h=G.players[i].hand;
+    const el=document.getElementById('hand'+i);
+    el.innerHTML='';
+    for(const type of ['triangle','circle','square']){
+      const pt=CFG.PIECE[type];
+      const cnt=h[type];
+      const row=document.createElement('div');
+      row.className='hand-row';
+      let svg='';
+      if(type==='circle') svg='<svg width="16" height="16"><circle cx="8" cy="8" r="6" fill="none" stroke="'+CFG.COLORS[i]+'" stroke-width="1.5"/></svg>';
+      else if(type==='square') svg='<svg width="16" height="16"><rect x="2" y="2" width="12" height="12" fill="none" stroke="'+CFG.COLORS[i]+'" stroke-width="1.5" rx="1"/></svg>';
+      else svg='<svg width="16" height="16"><polygon points="8,1 15,15 1,15" fill="none" stroke="'+CFG.COLORS[i]+'" stroke-width="1.5"/></svg>';
+      row.innerHTML=svg+'<span>'+pt.label+'</span><span class="hand-count">'+cnt+'</span>';
+      el.appendChild(row);
+    }
+    document.getElementById('total'+i).textContent='剩余 '+handTotal(i)+' 子';
+  }
+
+  const curH=G.players[pi].hand;
+  document.getElementById('cntCircle').textContent=curH.circle;
+  document.getElementById('cntSquare').textContent=curH.square;
+  document.getElementById('cntTriangle').textContent=curH.triangle;
+
+  document.querySelectorAll('.sel-btn').forEach(btn=>{
+    const t=btn.dataset.type;
+    const isSel=G.selectedType===t;
+    const isDis=curH[t]<=0;
+    btn.classList.toggle('selected',isSel);
+    btn.classList.toggle('disabled',isDis);
+  });
+}
+
+init();
+})();
+</script>
+</body>
+</html>
